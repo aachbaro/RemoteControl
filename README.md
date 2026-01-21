@@ -142,7 +142,7 @@ http://127.0.0.1:8000/
 
 ---
 
-## État attendu
+### État attendu
 
 - Environnement virtuel actif
 - Dépendances installées
