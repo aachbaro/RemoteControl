@@ -1062,3 +1062,233 @@ class RecordingServiceTests(TestCase):
 - `python manage.py test` passe
 - 3 à 5 tests maximum, mais couvrant l’essentiel
 - Base solide pour une CI GitHub Actions
+
+## Configuration production-like (dev / prod)
+
+Cette section met en place une configuration Django propre, reproductible et **sans pièges**, proche de conditions réelles, tout en restant simple pour le développement local et les tests.
+
+L’objectif est d’éviter les erreurs classiques :
+
+- variables d’environnement non chargées
+- `SECRET_KEY` manquant
+- mauvais ordre d’import des settings
+- tests qui cassent selon l’environnement
+
+---
+
+## Principe général
+
+- `base.py` : **neutre**, aucune dépendance à l’environnement
+- `dev.py` : configuration locale (DEBUG, SQLite, hosts locaux)
+- `prod.py` : configuration production (PostgreSQL, sécurité)
+- **un seul point de chargement du `.env`**
+- sélection de l’environnement via `DJANGO_SETTINGS_MODULE`
+
+```text
+backend/
+├── manage.py
+├── .env
+└── backend/
+    └── settings/
+        ├── __init__.py
+        ├── base.py
+        ├── dev.py
+        └── prod.py
+```
+
+---
+
+## 1. Installer python-dotenv
+
+```bash
+pip install python-dotenv
+pip freeze > requirements.txt
+```
+
+---
+
+## 2. Charger le `.env` au bon endroit (clé de la stabilité)
+
+Le chargement du fichier `.env` **doit se faire avant que Django ne lise les settings**.
+
+👉 **Solution la plus robuste** : charger le `.env` dans `manage.py`.
+
+Dans `backend/manage.py`, tout en haut du fichier :
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Résultat :
+
+- `runserver`
+- `migrate`
+- `test`
+
+ont tous accès aux variables d’environnement.
+
+---
+
+## 3. Définir l’environnement actif
+
+### Option recommandée : via `.env`
+
+Dans `backend/.env` :
+
+```env
+DJANGO_SETTINGS_MODULE=backend.settings.dev
+SECRET_KEY=secret-test-key
+ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
+⚠️ `DEBUG` **n’est pas** défini ici.
+
+---
+
+## 4. `settings/__init__.py`
+
+Ce fichier **ne doit rien importer**.
+
+```python
+# volontairement vide
+```
+
+La sélection de `dev` ou `prod` se fait uniquement via `DJANGO_SETTINGS_MODULE`.
+
+---
+
+## 5. `base.py` (neutre et sûr)
+
+`backend/backend/settings/base.py` :
+
+```python
+from pathlib import Path
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is not set")
+
+DEBUG = False
+ALLOWED_HOSTS = []
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "actions",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "backend.urls"
+WSGI_APPLICATION = "backend.wsgi.application"
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
+```
+
+👉 `base.py` :
+
+- ne lit pas `.env`
+- ne décide pas de l’environnement
+- reste stable et testable
+
+---
+
+## 6. `dev.py`
+
+`backend/backend/settings/dev.py` :
+
+```python
+from .base import *
+
+DEBUG = True
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+```
+
+---
+
+## 7. `prod.py`
+
+`backend/backend/settings/prod.py` :
+
+```python
+from .base import *
+import os
+
+DEBUG = False
+
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()
+]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB"),
+        "USER": os.getenv("POSTGRES_USER"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+        "HOST": os.getenv("POSTGRES_HOST"),
+        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    }
+}
+```
+
+---
+
+## 8. Vérification rapide
+
+En environnement dev :
+
+```bash
+python manage.py check
+python manage.py migrate
+python manage.py test
+python manage.py runserver
+```
+
+Test prod-like (sans base Postgres réelle) :
+
+```bash
+DJANGO_SETTINGS_MODULE=backend.settings.prod python manage.py check
+```
+
+---
+
+## État attendu
+
+- `python manage.py test` fonctionne immédiatement
+- pas d’erreur `SECRET_KEY is not set`
+- pas de dépendance cachée à `.env` dans les settings
+- séparation claire dev / prod
+
+---
+
+## Règles d’or à retenir
+
+- `.env` est chargé **une seule fois**
+- `base.py` est neutre
+- `dev.py` / `prod.py` décident du contexte
+- jamais d’import conditionnel dans `settings/__init__.py`
+
+Cette configuration sert de base saine pour Docker, CI, staging et production.
