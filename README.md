@@ -20,6 +20,31 @@ Se remettre à niveau sur Django et Django REST Framework via une API consommée
 - Consultation de l’état courant
 - Interface web locale simple
 
+## Sommaire
+
+Ordre strict pour comprendre Django de bout en bout sans sauter d’étapes.
+
+1. **Endpoint minimal**
+   Comprendre le flux complet requête HTTP → réponse JSON.
+
+2. **Endpoint avec état en mémoire**
+   Introduire un backend stateful et séparer vue et logique métier.
+
+3. **Introduction au modèle (base de données)**
+   Persister l’état avec l’ORM Django et comprendre le cycle de vie des données.
+
+4. **Sérialisation avec Django REST Framework**
+   Exposer des modèles proprement via des serializers.
+
+5. **Séparation logique métier / API**
+   Structurer le code avec des services indépendants des vues.
+
+6. **Tests backend minimalistes**
+   Valider les endpoints critiques avec quelques tests ciblés.
+
+7. **Configuration production-like**
+   Approcher des conditions réelles avec une config propre et sécurisée.
+
 ## Installation & setup (backend Django)
 
 ### 1. Créer l’environnement Python
