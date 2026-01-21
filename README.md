@@ -1,12 +1,10 @@
 # RemoteControl
 
-Service backend Django + frontend React permettant de déclencher des actions côté serveur depuis une interface web locale.
+Backend Django + frontend React permettant de déclencher des actions serveur depuis une interface web locale.
 
 ## Objectif
 
-Ce projet a pour but de me remettre à niveau sur Django et Django REST Framework dans un contexte réaliste : exposer une API backend consommée par un frontend déclenchant des actions côté serveur.
-
-Le périmètre est volontairement limité afin de privilégier la structure, la lisibilité et les bonnes pratiques.
+Se remettre à niveau sur Django et Django REST Framework via une API consommée par un frontend local.
 
 ## Stack technique
 
@@ -18,40 +16,36 @@ Le périmètre est volontairement limité afin de privilégier la structure, la 
 
 ## Fonctionnalités
 
-- API REST permettant de démarrer / arrêter une action serveur (commande dummy)
+- Démarrage / arrêt d’une action serveur (commande dummy)
 - Consultation de l’état courant
-- Interface web simple utilisable depuis un navigateur local
+- Interface web locale simple
 
 ## Installation & setup (backend Django)
 
-Cette section permet de lancer rapidement un environnement Django fonctionnel en local.
-
 ### 1. Créer l’environnement Python
 
-Un environnement virtuel est utilisé pour isoler les dépendances du projet.
+Isolation des dépendances backend.
 
 | Linux / macOS              | Windows (PowerShell)          |
 | -------------------------- | ----------------------------- |
 | `python3 -m venv venv`     | `python -m venv venv`         |
 | `source venv/bin/activate` | `venv\\Scripts\\Activate.ps1` |
 
-Le terminal doit afficher `(venv)` une fois activé.
-
 ---
 
 ### 2. Installer les dépendances
 
-Installation des dépendances backend nécessaires.
+Installation des dépendances backend.
 
-| Linux / macOS                                          | Windows                                                |
-| ------------------------------------------------------ | ------------------------------------------------------ |
-| `pip install django djangorestframework python-dotenv` | `pip install django djangorestframework python-dotenv` |
+```bash
+pip install django djangorestframework python-dotenv
+```
 
-Figer les dépendances :
+Génération du fichier de dépendances.
 
-| Linux / macOS                   | Windows                         |
-| ------------------------------- | ------------------------------- |
-| `pip freeze > requirements.txt` | `pip freeze > requirements.txt` |
+```bash
+pip freeze > requirements.txt
+```
 
 ---
 
@@ -59,12 +53,12 @@ Figer les dépendances :
 
 Initialisation du projet Django.
 
-| Linux / macOS                       | Windows                             |
-| ----------------------------------- | ----------------------------------- |
-| `django-admin startproject backend` | `django-admin startproject backend` |
-| `cd backend`                        | `cd backend`                        |
+```bash
+django-admin startproject backend
+cd backend
+```
 
-Structure obtenue :
+Structure obtenue.
 
 ```text
 backend/
@@ -78,11 +72,9 @@ backend/
 
 ---
 
-### 4. Variables d’environnement
+### 4. Définir les variables d’environnement
 
-Les variables locales sont définies dans un fichier `.env` (non versionné).
-
-Créer un fichier `.env` à la racine du dossier `backend/` :
+Configuration locale via un fichier `.env`.
 
 ```env
 DEBUG=True
@@ -94,9 +86,9 @@ Ajouter `.env` au `.gitignore`.
 
 ---
 
-### 5. Chargement du `.env`
+### 5. Charger le fichier `.env`
 
-Chargement automatique des variables d’environnement dans `settings.py`.
+Chargement automatique des variables dans `settings.py`.
 
 ```python
 from pathlib import Path
@@ -116,7 +108,7 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 ### 6. Activer Django REST Framework
 
-Ajout de DRF aux applications installées.
+Ajout de DRF dans les applications installées.
 
 ```python
 INSTALLED_APPS = [
@@ -135,26 +127,24 @@ INSTALLED_APPS = [
 
 ### 7. Lancer le serveur
 
-Application des migrations et démarrage du serveur de développement.
+Application des migrations et démarrage du serveur.
 
-| Linux / macOS                | Windows                      |
-| ---------------------------- | ---------------------------- |
-| `python manage.py migrate`   | `python manage.py migrate`   |
-| `python manage.py runserver` | `python manage.py runserver` |
-
-Accès local :
-
+```bash
+python manage.py migrate
+python manage.py runserver
 ```
+
+Accès local.
+
+```text
 http://127.0.0.1:8000/
 ```
 
-Si la page Django par défaut s’affiche, le setup est validé.
-
 ---
 
-### État attendu
+## État attendu
 
 - Environnement virtuel actif
-- Django et DRF installés
+- Dépendances installées
 - Variables d’environnement chargées
-- Serveur fonctionnel en local
+- Serveur Django accessible en local
