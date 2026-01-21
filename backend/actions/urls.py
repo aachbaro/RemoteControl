@@ -1,6 +1,5 @@
 from django.urls import path
-from actions.api.views import record_start, record_stop, record_status
-from actions.views import ping
+from actions.api.views import record_start, record_stop, record_status, ping
 
 urlpatterns = [
     path("ping/", ping),

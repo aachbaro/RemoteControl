@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from actions.api.serializers import RecordingStateSerializer
 from actions.services import recording_service
 
+@api_view(['GET'])
+def ping(request):
+    return Response({"status": "ok"})
 
 @api_view(["POST"])
 def record_start(request):

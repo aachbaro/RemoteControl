@@ -925,3 +925,140 @@ Relancer le serveur et tester `start / stop / status`.
 - API et JSON inchangés
 
 Cette structure rend les tests, les évolutions et les changements de stack beaucoup plus simples.
+
+## Tests backend minimalistes (DRF)
+
+Cette section ajoute quelques tests ciblés pour valider que l’API fonctionne et que l’état évolue correctement.
+
+---
+
+### 0. Pré-requis
+
+`rest_framework` est présent dans `INSTALLED_APPS`.
+
+---
+
+### 1. Créer une structure de tests dédiée
+
+Organisation des tests par fichiers plutôt qu’un `tests.py` monolithique.
+
+```bash
+mkdir -p actions/tests
+touch actions/tests/__init__.py
+touch actions/tests/test_recording_api.py
+```
+
+---
+
+### 2. Écrire 3 tests essentiels (status / start / stop)
+
+Validation du routage, des méthodes HTTP, de l’évolution de l’état et du contrat JSON.
+
+Dans `actions/tests/test_recording_api.py` :
+
+```python
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+
+class RecordingApiTests(TestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_status_default_is_false(self):
+        r = self.client.get("/api/record/status/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["is_recording"], False)
+        self.assertIsNone(r.json()["started_at"])
+
+    def test_start_sets_is_recording_true(self):
+        r = self.client.post("/api/record/start/", format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["is_recording"], True)
+        self.assertIsNotNone(r.json()["started_at"])
+
+    def test_stop_sets_is_recording_false(self):
+        self.client.post("/api/record/start/", format="json")
+        r = self.client.post("/api/record/stop/", format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["is_recording"], False)
+        self.assertIsNone(r.json()["started_at"])
+```
+
+---
+
+### 3. Comprendre l’isolation des tests
+
+`TestCase` utilise une base de test temporaire, applique les migrations, puis supprime tout à la fin.
+
+---
+
+### 4. Lancer les tests
+
+Exécution de tous les tests.
+
+```bash
+python manage.py test
+```
+
+Exécution des tests de l’app.
+
+```bash
+python manage.py test actions
+```
+
+---
+
+### 5. Test `ping` (optionnel)
+
+Validation rapide que l’API est accessible.
+
+Créer `actions/tests/test_ping.py` :
+
+```python
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+
+class PingTests(TestCase):
+    def test_ping(self):
+        client = APIClient()
+        r = client.get("/api/ping/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["status"], "ok")
+```
+
+---
+
+### 6. Tester le service sans HTTP (optionnel)
+
+Validation de la logique métier indépendamment de la couche API.
+
+Créer `actions/tests/test_recording_service.py` :
+
+```python
+from django.test import TestCase
+from actions.services import recording_service
+
+
+class RecordingServiceTests(TestCase):
+    def test_start_stop(self):
+        s1 = recording_service.status()
+        self.assertFalse(s1.is_recording)
+
+        s2 = recording_service.start()
+        self.assertTrue(s2.is_recording)
+        self.assertIsNotNone(s2.started_at)
+
+        s3 = recording_service.stop()
+        self.assertFalse(s3.is_recording)
+        self.assertIsNone(s3.started_at)
+```
+
+---
+
+### État attendu
+
+- `python manage.py test` passe
+- 3 à 5 tests maximum, mais couvrant l’essentiel
+- Base solide pour une CI GitHub Actions
