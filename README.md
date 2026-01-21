@@ -460,3 +460,154 @@ HTTP → vue DRF → service Python → état en mémoire → réponse JSON
 ```
 
 Ce modèle sert de base avant l’introduction d’une base de données ou d’un frontend.
+
+## Persistance de l’état : remplacement de la mémoire par la base de données
+
+Cette section remplace l’état en mémoire par un état persistant via l’ORM Django, sans modifier les routes API.
+
+---
+
+### 0. Pré-requis
+
+Le serveur tourne et le terminal est positionné dans `backend/` (au niveau de `manage.py`).
+
+---
+
+### 1. Créer le modèle `Recording`
+
+Définition du modèle persistant représentant l’état global.
+
+Dans `actions/models.py` :
+
+```python
+from django.db import models
+
+
+class Recording(models.Model):
+    is_recording = models.BooleanField(default=False)
+    started_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Recording(is_recording={self.is_recording}, started_at={self.started_at})"
+```
+
+---
+
+### 2. Créer et appliquer les migrations
+
+Synchronisation du modèle avec la base de données.
+
+```bash
+python manage.py makemigrations actions
+python manage.py migrate
+```
+
+---
+
+### 3. Remplacer l’état en mémoire par l’ORM
+
+Le service devient la seule source de vérité persistante.
+
+Remplacer entièrement `actions/services/recording.py` par :
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+from django.utils import timezone
+
+from actions.models import Recording
+
+
+@dataclass
+class RecordingState:
+    is_recording: bool
+    started_at: Optional[datetime]
+
+
+def _get_singleton() -> Recording:
+    obj, _ = Recording.objects.get_or_create(
+        id=1,
+        defaults={"is_recording": False, "started_at": None},
+    )
+    return obj
+
+
+def start() -> RecordingState:
+    rec = _get_singleton()
+    if not rec.is_recording:
+        rec.is_recording = True
+        rec.started_at = timezone.now()
+        rec.save(update_fields=["is_recording", "started_at", "updated_at"])
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+
+
+def stop() -> RecordingState:
+    rec = _get_singleton()
+    rec.is_recording = False
+    rec.started_at = None
+    rec.save(update_fields=["is_recording", "started_at", "updated_at"])
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+
+
+def status() -> RecordingState:
+    rec = _get_singleton()
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+```
+
+---
+
+### 4. Vérifier les vues existantes
+
+Les vues ne changent pas si elles consomment `RecordingState`.
+
+---
+
+### 5. Tester la persistance
+
+Vérification du statut.
+
+| Linux / macOS                                   | Windows (PowerShell)                                |
+| ----------------------------------------------- | --------------------------------------------------- |
+| `curl http://127.0.0.1:8000/api/record/status/` | `curl.exe http://127.0.0.1:8000/api/record/status/` |
+
+Démarrage de l’action.
+
+| Linux / macOS                                          | Windows (PowerShell)                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| `curl -X POST http://127.0.0.1:8000/api/record/start/` | `curl.exe -X POST http://127.0.0.1:8000/api/record/start/` |
+
+Redémarrage du serveur.
+
+```bash
+python manage.py runserver
+```
+
+Relecture du statut après redémarrage.
+
+---
+
+### 6. Validation via le shell Django (optionnel)
+
+Inspection directe de la base de données.
+
+```bash
+python manage.py shell
+```
+
+```python
+from actions.models import Recording
+Recording.objects.all()
+Recording.objects.get(id=1).is_recording
+```
+
+---
+
+### État attendu
+
+- Les endpoints fonctionnent sans changement
+- L’état persiste après redémarrage du serveur
+- La logique reste centralisée dans `services/`
+- Les vues restent fines et déclaratives
