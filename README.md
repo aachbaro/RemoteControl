@@ -611,3 +611,115 @@ Recording.objects.get(id=1).is_recording
 - L’état persiste après redémarrage du serveur
 - La logique reste centralisée dans `services/`
 - Les vues restent fines et déclaratives
+
+## Sérialisation DRF : produire le JSON via un serializer
+
+Cette section remplace le JSON “fait à la main” par un serializer DRF, sans changer les routes ni le format de réponse.
+
+---
+
+### 0. Point de départ
+
+Le modèle `Recording` est en base, le service renvoie `RecordingState`, et les vues renvoient encore un dictionnaire.
+
+---
+
+### 1. Créer un serializer DRF
+
+Définition explicite du contrat JSON et sérialisation automatique des datetimes.
+
+Créer `actions/serializers.py` :
+
+```python
+from rest_framework import serializers
+
+
+class RecordingStateSerializer(serializers.Serializer):
+    is_recording = serializers.BooleanField()
+    started_at = serializers.DateTimeField(allow_null=True)
+```
+
+---
+
+### 2. Utiliser le serializer dans les vues
+
+Les vues renvoient désormais `RecordingStateSerializer(state).data`.
+
+Dans `actions/views.py` :
+
+```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from .serializers import RecordingStateSerializer
+from .services import recording
+
+
+@api_view(["POST"])
+def record_start(request):
+    state = recording.start()
+    data = RecordingStateSerializer(state).data
+    return Response(data)
+
+
+@api_view(["POST"])
+def record_stop(request):
+    state = recording.stop()
+    data = RecordingStateSerializer(state).data
+    return Response(data)
+
+
+@api_view(["GET"])
+def record_status(request):
+    state = recording.status()
+    data = RecordingStateSerializer(state).data
+    return Response(data)
+```
+
+---
+
+### 3. (Optionnel) Factoriser la sérialisation
+
+Réduire la répétition sans changer la logique.
+
+```python
+def _serialize_state(state):
+    return RecordingStateSerializer(state).data
+```
+
+---
+
+### 4. Tester que le JSON reste identique
+
+Vérification du status.
+
+| Linux / macOS                                   | Windows (PowerShell)                                |
+| ----------------------------------------------- | --------------------------------------------------- |
+| `curl http://127.0.0.1:8000/api/record/status/` | `curl.exe http://127.0.0.1:8000/api/record/status/` |
+
+Réponse attendue.
+
+```json
+{ "is_recording": false, "started_at": null }
+```
+
+Start / Stop.
+
+| Linux / macOS                                          | Windows (PowerShell)                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| `curl -X POST http://127.0.0.1:8000/api/record/start/` | `curl.exe -X POST http://127.0.0.1:8000/api/record/start/` |
+| `curl -X POST http://127.0.0.1:8000/api/record/stop/`  | `curl.exe -X POST http://127.0.0.1:8000/api/record/stop/`  |
+
+---
+
+### 5. Objectif technique
+
+Le serializer standardise le format datetime et centralise le contrat de réponse.
+
+---
+
+### État attendu
+
+- Même API et mêmes routes
+- Même JSON (clés + format)
+- Réponse produite via DRF serializer

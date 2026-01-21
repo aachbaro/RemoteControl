@@ -5,6 +5,7 @@ from django.shortcuts import render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .serializers import RecordingStateSerializer
 from .services import recording
 
 @api_view(['GET'])
@@ -14,29 +15,17 @@ def ping(request):
 @api_view(['POST'])
 def record_start(request):
     state = recording.start()
-    return Response(
-        {
-            "is_recording": state.is_recording,
-            "started_at": state.started_at.isoformat() if state.started_at else None,
-        }
-    )
+    data = RecordingStateSerializer(state).data
+    return Response(data)
 
 @api_view(['POST'])
 def record_stop(request):
     state = recording.stop()
-    return Response(
-        {
-            "is_recording": state.is_recording,
-            "started_at": None,
-        }
-    )
+    data = RecordingStateSerializer(state).data
+    return Response(data)
 
 @api_view(['GET'])
 def record_status(request):
     state = recording.status()
-    return Response(
-        {
-            "is_recording": state.is_recording,
-            "started_at": state.started_at.isoformat() if state.started_at else None,
-        }
-    )
+    data = RecordingStateSerializer(state).data
+    return Response(data)
