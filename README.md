@@ -723,3 +723,205 @@ Le serializer standardise le format datetime et centralise le contrat de répons
 - Même API et mêmes routes
 - Même JSON (clés + format)
 - Réponse produite via DRF serializer
+
+## Séparation logique métier / API (architecture claire)
+
+Cette étape formalise une structure que tu as déjà commencée, afin que Django devienne un adaptateur HTTP autour de ton code métier.
+
+---
+
+### Où on en est dans l’apprentissage
+
+À ce stade, tu as déjà mis en place :
+
+- Routage et vues DRF
+- Endpoints avec état (`start / stop / status`)
+- Persistance via l’ORM Django
+- Sérialisation via DRF
+
+La suite logique est d’organiser le code pour éviter le mélange HTTP, logique métier et accès base de données.
+
+---
+
+### Objectif architectural
+
+Obtenir une chaîne claire et stable.
+
+```text
+HTTP (views) → service (use-cases) → repository (DB) → modèle (ORM)
+```
+
+Les endpoints restent identiques.
+
+---
+
+### 1. Créer les couches du domaine `actions/`
+
+Découpage explicite des responsabilités.
+
+```bash
+mkdir -p actions/api actions/repositories actions/services
+touch actions/api/__init__.py actions/repositories/__init__.py actions/services/__init__.py
+```
+
+---
+
+### 2. Déplacer le serializer dans la couche API
+
+Le serializer appartient à la frontière HTTP.
+
+Créer `actions/api/serializers.py` :
+
+```python
+from rest_framework import serializers
+
+
+class RecordingStateSerializer(serializers.Serializer):
+    is_recording = serializers.BooleanField()
+    started_at = serializers.DateTimeField(allow_null=True)
+```
+
+---
+
+### 3. Créer un repository pour l’accès base de données
+
+L’ORM est isolé dans une seule couche.
+
+Créer `actions/repositories/recording_repo.py` :
+
+```python
+from actions.models import Recording
+
+
+def get_singleton() -> Recording:
+    obj, _ = Recording.objects.get_or_create(
+        id=1,
+        defaults={"is_recording": False, "started_at": None},
+    )
+    return obj
+
+
+def save(rec: Recording, *, update_fields=None) -> None:
+    if update_fields:
+        rec.save(update_fields=update_fields)
+    else:
+        rec.save()
+```
+
+---
+
+### 4. Centraliser la logique métier dans un service
+
+Les cas d’usage ne dépendent ni de HTTP ni directement des vues.
+
+Créer `actions/services/recording_service.py` :
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+from django.utils import timezone
+
+from actions.repositories import recording_repo
+
+
+@dataclass
+class RecordingState:
+    is_recording: bool
+    started_at: Optional[datetime]
+
+
+def start() -> RecordingState:
+    rec = recording_repo.get_singleton()
+    if not rec.is_recording:
+        rec.is_recording = True
+        rec.started_at = timezone.now()
+        recording_repo.save(rec, update_fields=["is_recording", "started_at", "updated_at"])
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+
+
+def stop() -> RecordingState:
+    rec = recording_repo.get_singleton()
+    rec.is_recording = False
+    rec.started_at = None
+    recording_repo.save(rec, update_fields=["is_recording", "started_at", "updated_at"])
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+
+
+def status() -> RecordingState:
+    rec = recording_repo.get_singleton()
+    return RecordingState(is_recording=rec.is_recording, started_at=rec.started_at)
+```
+
+---
+
+### 5. Déplacer les vues dans la couche API
+
+Les vues deviennent une simple orchestration HTTP.
+
+Créer `actions/api/views.py` :
+
+```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from actions.api.serializers import RecordingStateSerializer
+from actions.services import recording_service
+
+
+@api_view(["POST"])
+def record_start(request):
+    state = recording_service.start()
+    return Response(RecordingStateSerializer(state).data)
+
+
+@api_view(["POST"])
+def record_stop(request):
+    state = recording_service.stop()
+    return Response(RecordingStateSerializer(state).data)
+
+
+@api_view(["GET"])
+def record_status(request):
+    state = recording_service.status()
+    return Response(RecordingStateSerializer(state).data)
+```
+
+---
+
+### 6. Adapter le routage vers les nouvelles vues
+
+Les routes pointent vers la couche API.
+
+Dans `actions/urls.py` :
+
+```python
+from django.urls import path
+from actions.api.views import record_start, record_stop, record_status
+from actions.views import ping
+
+urlpatterns = [
+    path("ping/", ping),
+    path("record/start/", record_start),
+    path("record/stop/", record_stop),
+    path("record/status/", record_status),
+]
+```
+
+---
+
+### 7. Vérifier que l’API n’a pas changé
+
+Relancer le serveur et tester `start / stop / status`.
+
+---
+
+### État attendu
+
+- Vues limitées à la couche HTTP
+- Logique métier centralisée dans `services/`
+- Accès base isolé dans `repositories/`
+- API et JSON inchangés
+
+Cette structure rend les tests, les évolutions et les changements de stack beaucoup plus simples.
