@@ -272,3 +272,166 @@ Requête HTTP → urls du projet → urls de l’app → vue → réponse JSON
 ```
 
 Toutes les futures routes API (start, stop, status, etc.) suivent exactement ce même schéma.
+
+## Endpoints avec état : `start / stop / status`
+
+Cette section ajoute des endpoints permettant de gérer un état serveur en mémoire, sans base de données.
+
+---
+
+### 1. Créer une logique métier séparée
+
+La logique métier est isolée dans un service Python, indépendant des vues HTTP.
+
+```bash
+mkdir -p actions/services
+touch actions/services/__init__.py
+touch actions/services/recording.py
+```
+
+Dans `actions/services/recording.py` :
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+
+@dataclass
+class RecordingState:
+    is_recording: bool = False
+    started_at: Optional[datetime] = None
+
+
+_state = RecordingState()
+
+
+def start() -> RecordingState:
+    if not _state.is_recording:
+        _state.is_recording = True
+        _state.started_at = datetime.utcnow()
+    return _state
+
+
+def stop() -> RecordingState:
+    _state.is_recording = False
+    _state.started_at = None
+    return _state
+
+
+def status() -> RecordingState:
+    return _state
+```
+
+---
+
+### 2. Exposer la logique via des vues API
+
+Les vues appellent le service et renvoient une réponse JSON.
+
+Dans `actions/views.py` :
+
+```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from .services import recording
+
+
+@api_view(["POST"])
+def record_start(request):
+    state = recording.start()
+    return Response({
+        "is_recording": state.is_recording,
+        "started_at": state.started_at.isoformat() if state.started_at else None,
+    })
+
+
+@api_view(["POST"])
+def record_stop(request):
+    state = recording.stop()
+    return Response({
+        "is_recording": state.is_recording,
+        "started_at": None,
+    })
+
+
+@api_view(["GET"])
+def record_status(request):
+    state = recording.status()
+    return Response({
+        "is_recording": state.is_recording,
+        "started_at": state.started_at.isoformat() if state.started_at else None,
+    })
+```
+
+---
+
+### 3. Définir les routes de l’app
+
+Ajout des routes associées aux nouvelles actions.
+
+Dans `actions/urls.py` :
+
+```python
+from django.urls import path
+from .views import record_start, record_stop, record_status
+
+urlpatterns += [
+    path("record/start/", record_start),
+    path("record/stop/", record_stop),
+    path("record/status/", record_status),
+]
+```
+
+---
+
+### 4. Tester les endpoints
+
+Démarrer le serveur si nécessaire :
+
+```bash
+python manage.py runserver
+```
+
+#### Tester l’état courant
+
+| Linux / macOS                                   | Windows (PowerShell)                                |
+| ----------------------------------------------- | --------------------------------------------------- |
+| `curl http://127.0.0.1:8000/api/record/status/` | `curl.exe http://127.0.0.1:8000/api/record/status/` |
+
+---
+
+#### Démarrer l’action
+
+| Linux / macOS                                          | Windows (PowerShell)                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| `curl -X POST http://127.0.0.1:8000/api/record/start/` | `curl.exe -X POST http://127.0.0.1:8000/api/record/start/` |
+
+---
+
+#### Arrêter l’action
+
+| Linux / macOS                                         | Windows (PowerShell)                                      |
+| ----------------------------------------------------- | --------------------------------------------------------- |
+| `curl -X POST http://127.0.0.1:8000/api/record/stop/` | `curl.exe -X POST http://127.0.0.1:8000/api/record/stop/` |
+
+---
+
+### État attendu
+
+- Les endpoints `start / stop / status` répondent correctement
+- L’état est conservé en mémoire tant que le serveur tourne
+- La logique métier est séparée des vues HTTP
+
+---
+
+### Objectif pédagogique
+
+Cette étape permet de comprendre :
+
+```text
+HTTP → vue DRF → service Python → état en mémoire → réponse JSON
+```
+
+Ce modèle sert de base avant l’introduction d’une base de données ou d’un frontend.

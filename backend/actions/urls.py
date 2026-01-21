@@ -1,6 +1,10 @@
 from django.urls import path
-from .views import ping
+from .views import ping, record_start, record_stop, record_status
 
 urlpatterns = [
     path("ping/", ping),
+
+    path("record/start/", record_start),
+    path("record/stop/", record_stop),
+    path("record/status/", record_status),
 ]
